@@ -137,6 +137,7 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
   void _addTravelPlan(BuildContext context) {
     TextEditingController destinationController = TextEditingController();
     TextEditingController dateController = TextEditingController();
+    TextEditingController descriptionController = TextEditingController();
 
     showDialog(
       context: context,
@@ -154,6 +155,10 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
                 controller: dateController,
                 decoration: const InputDecoration(hintText: 'Enter date (e.g., 2023-12-01)'),
               ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(hintText: 'Enter description'),
+              ),
             ],
           ),
           actions: [
@@ -166,9 +171,10 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
             TextButton(
               onPressed: () {
                 final plan = {
+                  'id': DateTime.now().millisecondsSinceEpoch.toString(), // Unique ID
                   'destination': destinationController.text,
                   'date': dateController.text,
-                  'description': 'Travel plan to ${destinationController.text} on ${dateController.text}',
+                  'description': descriptionController.text,
                   'completed': false, // Track completion status
                 };
                 widget.onPlanAdded(plan);
@@ -204,29 +210,67 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
         },
         itemBuilder: (context, index) {
           final plan = widget.folder.plans[index];
-          return Card(
-            key: ValueKey(plan), // Unique key for each item
-            margin: const EdgeInsets.all(8.0),
-            child: ListTile(
-              title: Text(
-                plan['destination']!,
-                style: TextStyle(
-                  decoration: plan['completed'] == true
-                      ? TextDecoration.lineThrough // Strikethrough for completed plans
-                      : TextDecoration.none,
-                ),
+          return Dismissible(
+            key: ValueKey(plan['id']), // Unique key for each item
+            background: Container(
+              color: Colors.green,
+              alignment: Alignment.centerLeft,
+              child: const Padding(
+                padding: EdgeInsets.only(left: 20),
+                child: Icon(Icons.check, color: Colors.white),
               ),
-              subtitle: Text('Date: ${plan['date']}'),
-              leading: const Icon(Icons.flight_takeoff),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildCheckButton(plan), // Check button
-                  const SizedBox(width: 8), // Spacing between buttons
-                  _buildTrashButton(plan), // Trash button
-                  const SizedBox(width: 8), // Spacing between buttons
-                  _buildDragHandle(), // Drag handle
-                ],
+            ),
+            secondaryBackground: Container(
+              color: Colors.red,
+              alignment: Alignment.centerRight,
+              child: const Padding(
+                padding: EdgeInsets.only(right: 20),
+                child: Icon(Icons.delete, color: Colors.white),
+              ),
+            ),
+            onDismissed: (direction) {
+              setState(() {
+                widget.folder.plans.removeAt(index);
+              });
+            },
+            confirmDismiss: (direction) async {
+              if (direction == DismissDirection.startToEnd) {
+                // Swipe to mark as completed
+                setState(() {
+                  plan['completed'] = true;
+                });
+                return false; // Do not dismiss
+              } else {
+                // Swipe to delete
+                return true; // Dismiss
+              }
+            },
+            child: GestureDetector(
+              onLongPress: () {
+                _editPlan(context, plan);
+              },
+              onDoubleTap: () {
+                setState(() {
+                  widget.folder.plans.removeAt(index);
+                });
+              },
+              child: Card(
+                key: ValueKey(plan['id']), // Unique key for each item
+                margin: const EdgeInsets.all(8.0),
+                color: plan['completed'] == true ? Colors.green[100] : Colors.blue[100],
+                child: ListTile(
+                  title: Text(
+                    plan['destination']!,
+                    style: TextStyle(
+                      decoration: plan['completed'] == true
+                          ? TextDecoration.lineThrough // Strikethrough for completed plans
+                          : TextDecoration.none,
+                    ),
+                  ),
+                  subtitle: Text('Date: ${plan['date']}\nDescription: ${plan['description']}'),
+                  leading: const Icon(Icons.flight_takeoff),
+                  trailing: _buildDragHandle(), // Drag handle
+                ),
               ),
             ),
           );
@@ -240,29 +284,54 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
     );
   }
 
-  // Check button to mark a plan as completed
-  Widget _buildCheckButton(Map<String, dynamic> plan) {
-    return IconButton(
-      icon: Icon(
-        plan['completed'] == true ? Icons.check_circle : Icons.check_circle_outline,
-        color: plan['completed'] == true ? Colors.green : Colors.grey,
-      ),
-      onPressed: () {
-        setState(() {
-          plan['completed'] = !(plan['completed'] ?? false); // Toggle completion status
-        });
-      },
-    );
-  }
+  // Edit plan details
+  void _editPlan(BuildContext context, Map<String, dynamic> plan) {
+    TextEditingController destinationController = TextEditingController(text: plan['destination']);
+    TextEditingController dateController = TextEditingController(text: plan['date']);
+    TextEditingController descriptionController = TextEditingController(text: plan['description']);
 
-  // Trash button to delete a plan
-  Widget _buildTrashButton(Map<String, dynamic> plan) {
-    return IconButton(
-      icon: const Icon(Icons.delete, color: Colors.red),
-      onPressed: () {
-        setState(() {
-          widget.folder.plans.remove(plan); // Remove the plan from the list
-        });
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Plan'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: destinationController,
+                decoration: const InputDecoration(hintText: 'Enter destination'),
+              ),
+              TextField(
+                controller: dateController,
+                decoration: const InputDecoration(hintText: 'Enter date (e.g., 2023-12-01)'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(hintText: 'Enter description'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  plan['destination'] = destinationController.text;
+                  plan['date'] = dateController.text;
+                  plan['description'] = descriptionController.text;
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
       },
     );
   }
