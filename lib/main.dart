@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 void main() {
   runApp(const TravelPlansApp());
@@ -107,10 +108,29 @@ class _TravelPlansHomePageState extends State<TravelPlansHomePage> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _createFolder,
-        tooltip: 'Create Folder',
-        child: const Icon(Icons.create_new_folder),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            onPressed: _createFolder,
+            tooltip: 'Create Folder',
+            child: const Icon(Icons.create_new_folder),
+          ),
+          const SizedBox(height: 16), // Spacing between buttons
+          FloatingActionButton(
+            onPressed: () {
+              // Navigate to the calendar screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CalendarScreen(folders: folders),
+                ),
+              );
+            },
+            tooltip: 'View Calendar',
+            child: const Icon(Icons.calendar_today),
+          ),
+        ],
       ),
     );
   }
@@ -134,10 +154,22 @@ class FolderDetailsPage extends StatefulWidget {
 
 class _FolderDetailsPageState extends State<FolderDetailsPage> {
   // Function to show a dialog to add a new travel plan
-  void _addTravelPlan(BuildContext context) {
+  void _addTravelPlan(BuildContext context) async {
     TextEditingController destinationController = TextEditingController();
-    TextEditingController dateController = TextEditingController();
     TextEditingController descriptionController = TextEditingController();
+    DateTime? selectedDate;
+
+    // Show date picker
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(), // Default to today's date
+      firstDate: DateTime(2023), // Earliest allowed date
+      lastDate: DateTime(2025, 12, 31), // Latest allowed date
+    );
+
+    if (date == null) return; // User canceled date selection
+
+    selectedDate = date;
 
     showDialog(
       context: context,
@@ -150,10 +182,6 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
               TextField(
                 controller: destinationController,
                 decoration: const InputDecoration(hintText: 'Enter destination'),
-              ),
-              TextField(
-                controller: dateController,
-                decoration: const InputDecoration(hintText: 'Enter date (e.g., 2023-12-01)'),
               ),
               TextField(
                 controller: descriptionController,
@@ -173,7 +201,7 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
                 final plan = {
                   'id': DateTime.now().millisecondsSinceEpoch.toString(), // Unique ID
                   'destination': destinationController.text,
-                  'date': dateController.text,
+                  'date': selectedDate!.toIso8601String(), // Store date as ISO string
                   'description': descriptionController.text,
                   'completed': false, // Track completion status
                 };
@@ -285,10 +313,22 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
   }
 
   // Edit plan details
-  void _editPlan(BuildContext context, Map<String, dynamic> plan) {
+  void _editPlan(BuildContext context, Map<String, dynamic> plan) async {
     TextEditingController destinationController = TextEditingController(text: plan['destination']);
-    TextEditingController dateController = TextEditingController(text: plan['date']);
     TextEditingController descriptionController = TextEditingController(text: plan['description']);
+    DateTime? selectedDate = DateTime.tryParse(plan['date']);
+
+    // Show date picker
+    final date = await showDatePicker(
+      context: context,
+      initialDate: selectedDate ?? DateTime.now(), // Default to the plan's date or today's date
+      firstDate: DateTime(2023), // Earliest allowed date
+      lastDate: DateTime(2025, 12, 31), // Latest allowed date
+    );
+
+    if (date == null) return; // User canceled date selection
+
+    selectedDate = date;
 
     showDialog(
       context: context,
@@ -301,10 +341,6 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
               TextField(
                 controller: destinationController,
                 decoration: const InputDecoration(hintText: 'Enter destination'),
-              ),
-              TextField(
-                controller: dateController,
-                decoration: const InputDecoration(hintText: 'Enter date (e.g., 2023-12-01)'),
               ),
               TextField(
                 controller: descriptionController,
@@ -323,7 +359,7 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
               onPressed: () {
                 setState(() {
                   plan['destination'] = destinationController.text;
-                  plan['date'] = dateController.text;
+                  plan['date'] = selectedDate!.toIso8601String(); // Update date
                   plan['description'] = descriptionController.text;
                 });
                 Navigator.pop(context);
@@ -354,6 +390,95 @@ class _FolderDetailsPageState extends State<FolderDetailsPage> {
             color: Colors.grey, // Neutral color
           ),
         ),
+      ),
+    );
+  }
+}
+
+class CalendarScreen extends StatelessWidget {
+  final List<Folder> folders;
+
+  const CalendarScreen({super.key, required this.folders});
+
+  @override
+  Widget build(BuildContext context) {
+    // Combine all plans from all folders
+    final allPlans = folders.expand((folder) => folder.plans).toList();
+
+    // Group plans by date
+    final Map<DateTime, List<Map<String, dynamic>>> events = {};
+    for (final plan in allPlans) {
+      final date = DateTime.parse(plan['date']).toUtc();
+      if (events[date] == null) {
+        events[date] = [];
+      }
+      events[date]!.add(plan);
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Calendar'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: TableCalendar(
+        firstDay: DateTime.utc(2023, 1, 1), // Start of the calendar range
+        lastDay: DateTime.utc(2025, 12, 31), // End of the calendar range
+        focusedDay: DateTime.now(), // Default to today's date
+        eventLoader: (date) {
+          return events[date] ?? [];
+        },
+        calendarBuilders: CalendarBuilders(
+          markerBuilder: (context, date, events) {
+            if (events.isNotEmpty) {
+              return Positioned(
+                right: 1,
+                bottom: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${events.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              );
+            }
+            return null;
+          },
+        ),
+        onDaySelected: (selectedDay, focusedDay) {
+          final plansForDay = events[selectedDay] ?? [];
+          if (plansForDay.isNotEmpty) {
+            showDialog(
+              context: context,
+              builder: (context) {
+                return AlertDialog(
+                  title: Text('Plans for ${selectedDay.toLocal()}'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: plansForDay.map((plan) {
+                      return ListTile(
+                        title: Text(plan['destination']!),
+                        subtitle: Text('Description: ${plan['description']}'),
+                      );
+                    }).toList(),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Close'),
+                    ),
+                  ],
+                );
+              },
+            );
+          }
+        },
       ),
     );
   }
