@@ -30,7 +30,7 @@ class TravelPlansHomePage extends StatefulWidget {
 
 class _TravelPlansHomePageState extends State<TravelPlansHomePage> {
   // List to hold folders
-  final List<Folder> folders = [];
+  List<Folder> folders = [];
 
   // Function to show a dialog to create a new folder
   void _createFolder() {
